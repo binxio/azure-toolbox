@@ -40,8 +40,8 @@ gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cl
 RUN curl "https://packages.microsoft.com/keys/microsoft.asc" | gpg --dearmor > microsoft.gpg && \
     wget "https://github.com/Azure/azure-functions-core-tools/releases/download/${AZ_FUNCTIONS_VERSION}/Azure.Functions.Cli.linux-x64.${AZ_FUNCTIONS_VERSION}.zip" && \
     unzip Azure.Functions.Cli.linux-x64.*.zip -d /usr/local/bin && \
+    rm Azure.Functions.Cli.linux-x64.*.zip && \
     chmod 755 /usr/local/bin/func && \
     echo $(cat /usr/local/bin/func.runtimeconfig.json | jq '.["runtimeOptions"] += {"configProperties": {"System.Globalization.Invariant": true}}') > /usr/local/bin/func.runtimeconfig.json
     
-
 WORKDIR /home
