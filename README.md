@@ -14,5 +14,5 @@ A toolbox for deploying and managing infrastructure on Azure! w(-.-)w
 
 ## Usage
 You may use this image in a CI pipeline or locally by running:
-```docker run -it --rm -v (PWD):/home binxio/azure-toolbox```
+```docker run -it --rm -v $(PWD):/home binxio/azure-toolbox```
 
