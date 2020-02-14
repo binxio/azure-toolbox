@@ -1,0 +1,103 @@
+---
+version: 2.1
+jobs:
+  build-and-scan-image:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - checkout
+      - run:
+          name: Build Docker image
+          command: docker build -t ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1} .
+      - run:
+          name: Start Docker image
+          command: docker run ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}
+      - run:
+          name: Start container vulnerability tooling images
+          command: | 
+            docker run -d --name db arminc/clair-db:latest
+            docker run -p 6060:6060 --link db:postgres -d --name clair --restart on-failure arminc/clair-local-scan:latest
+      - run:
+          name: Download Clair scanning utility
+          command: | 
+            wget https://github.com/arminc/clair-scanner/releases/download/v8/clair-scanner_linux_amd64
+            mv clair-scanner_linux_amd64 clair-scanner
+            chmod +x clair-scanner
+      - run:
+          name: Ensure vulnerability whitelist file exists
+          command: touch clair-whitelist.yml
+      - run:
+          name: Scan docker image for vulnerabilities
+          command: | 
+            echo "Waiting for Clair DB to start"
+            while( ! wget -q -O /dev/null http://localhost:6060/v1/namespaces ) ; do sleep 1 ; echo -n "." ; done
+            retries=0
+            echo "Waiting for Clair daemon to be ready for scanning"
+            while( ! wget -T 10 -q -O /dev/null http://localhost:6060/v1/namespaces ) ; do sleep 1 ; echo -n "." ; if [ $retries -eq 10 ] ; then echo " Timeout, aborting." ; exit 1 ; fi ; retries=$(($retries+1)) ; done
+            ./clair-scanner -c http://localhost:6060 --ip $(hostname -i) -t 'Low' -r 'container-scanning-report.json' -l 'clair.log' -w 'clair-whitelist.yml' ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}
+      - store_artifacts:
+          path: ./container-scanning-report.json
+          destination: "container-scanning-report.json"
+      - persist_to_workspace:
+          root: .
+          paths: ./container-scanning-report.json
+      - run:
+          name: Push latest image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASS" | docker login -u deanshanahan --password-stdin
+            docker tag ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1} binxio/${CIRCLE_PROJECT_REPONAME}:latest
+            docker push binxio/${CIRCLE_PROJECT_REPONAME}:latest 
+  release-image:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - checkout
+      - run:
+          name: Push tagged image to Docker Hub
+          command: |
+            if git describe --tags &> /dev/null; then
+              echo "$DOCKERHUB_PASS" | docker login -u deanshanahan --password-stdin
+              docker pull binxio/${CIRCLE_PROJECT_REPONAME}:latest
+              docker tag binxio/${CIRCLE_PROJECT_REPONAME}:latest binxio/${CIRCLE_PROJECT_REPONAME}:$(git describe --tags)
+              docker push binxio/${CIRCLE_PROJECT_REPONAME}:$(git describe --tags)
+            else
+              echo "No tagged version to release"
+            fi
+  update-readme:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Add vulnerability report to README.md before sending to Docker Hub
+          command: |
+            ls -la && ./.circleci/generate_metrics_table.sh ./container-scanning-report.json ./README.md
+      - run:
+          name: Push README.md to Docker Hub
+          command: |
+            TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d "{\"username\": \"deanshanahan\", \"password\": \"${DOCKERHUB_PASS}\"}" https://hub.docker.com/v2/users/login/ | jq -r .token)
+            if curl -s --output /dev/null -H "Authorization: JWT ${TOKEN}" -X PATCH --data-urlencode full_description@./README.md "https://hub.docker.com/v2/repositories/binxio/${CIRCLE_PROJECT_REPONAME}/" ; then echo "README.md successfully updated"; else echo "README.md update failed"; fi
+workflows:
+  version: 2
+  build-master:
+    jobs:
+      - build-and-scan-image:
+          filters:
+            branches:
+              only: master
+            tags:
+              only: /.*/
+      - release-image:
+          requires:
+            - build-and-scan-image
+          filters:
+            tags:
+              only: /(^[0-9]*\.[0-9]*\.[0-9])/
+      - update-readme:
+          requires:
+            - build-and-scan-image
+          filters:
+            branches:
+              only: master
