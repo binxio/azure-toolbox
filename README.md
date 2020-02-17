@@ -14,5 +14,13 @@ A toolbox for deploying and managing infrastructure on Azure! w(-.-)w
 
 ## Usage
 You may use this image in a CI pipeline or locally by running:
-```docker run -it --rm -v $(PWD):/home binxio/azure-toolbox```
+`docker run -it --rm -e ARM_SUBSCRIPTION_ID='{{ insert subscription ID }}' -e ARM_CLIENT_ID='{{ insert client ID }}' -e ARM_CLIENT_SECRET={{ $(cat ~/.secrets/az_secret) }} -e ARM_TENANT_ID='{{ insert tenant ID }}' -v {{ /Users/your.name/project:/home }} binxio/azure-toolbox`
 
+## Environment Variables
+| Name  | Value | Why? |
+| :---: | ----- | ---- |
+| *ARM_SUBSCRIPTION_ID* | From Azure->Subscriptions | For terraform to deploy to the correct subscription. |
+| *ARM_CLIENT_ID* | From Azure->App Registrations | The client ID for logging in using a service principal. |
+| *ARM_CLIENT_SECRET* | From Azure->App Registrations | The client secret to use the service principal. I recommend storing this as a file instead of passing it directly. |
+| *ARM_TENANT_ID* | From Azure->App Registrations | The tenant ID, also called Directory ID. |
+ 

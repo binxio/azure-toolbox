@@ -1,7 +1,11 @@
 FROM centos:8
 
-ARG TERRAFORM_VERSION="0.12.12"
+ARG TERRAFORM_VERSION="0.12.17"
 ARG AZ_FUNCTIONS_VERSION="3.0.2106"
+ARG ARM_CLIENT_ID=""
+ARG ARM_CLIENT_SECRET=""
+ARG ARM_SUBSCRIPTION_ID=""
+ARG ARM_TENANT_ID=""
 
 ENV PATH="/root/.local/bin:${PATH}"
 
@@ -45,3 +49,5 @@ RUN curl "https://packages.microsoft.com/keys/microsoft.asc" | gpg --dearmor > m
     echo $(cat /usr/local/bin/func.runtimeconfig.json | jq '.["runtimeOptions"] += {"configProperties": {"System.Globalization.Invariant": true}}') > /usr/local/bin/func.runtimeconfig.json
     
 WORKDIR /home
+
+ENTRYPOINT ["bash", "-c", "if [[ -z ${ARM_CLIENT_ID} ]] || [[ -z ${ARM_CLIENT_SECRET} ]] || [[ -z ${ARM_TENANT_ID} ]] || [[ -z ${ARM_SUBSCRIPTION_ID} ]]; then bash; else if az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET -t $ARM_TENANT_ID && az account set --subscription $ARM_SUBSCRIPTION_ID; then bash; else bash; fi; fi"]
